@@ -1,15 +1,56 @@
 const path = require('path');
-const {BASE_DIR, PM2_DIR, KUNGFU_ENGINE, buildProcessLogPath} = require('__gConfig/pathConfig');
+const {BASE_DIR, KUNGFU_ENGINE, buildProcessLogPath} = require('__gConfig/pathConfig');
 const {logger} = require('__gUtils/logUtils');
-export const pm2 = require('pm2')
+const {platform} = require('__gConfig/platformConfig');
+const fkill = require('fkill');
+const {getProcesses} = require('getprocesses');
+const taskkill = require('taskkill');
+export const pm2 = require('pm2');
+
+//=========================== task kill =========================================
+
+const winKill = (tasks) => {
+    let pIdList = [];
+    return getProcesses().then(processes => {
+        processes.forEach(p => {
+            const rawCommandLine = p.rawCommandLine
+            tasks.forEach(task => {
+                if(rawCommandLine.indexOf(task) !== -1) pIdList.push(p.pid)
+            })
+        })
+        if(!pIdList || !pIdList.length) return new Promise(resolve => resolve(true))
+        return taskkill(pIdList, {
+            force: true,
+            tree: platform === 'win' 
+        })
+    })
+}
+
+const unixKill = (tasks) => {
+    return fkill(tasks, {
+        force: true,
+        tree: platform === 'win'      
+    })
+}
+
+const kfKill = (tasks) => {
+    if(platform !== 'win') return unixKill(tasks)
+    else return winKill(tasks)
+}
 
 
-// process.env.PM2_HOME = PM2_DIR;
+export const KillKfc = () => kfKill(['kfc'])
+
+export const killExtra = () => kfKill(['kfc', 'pm2'])
+
+//=========================== pm2 manager =========================================
 
 const pm2Connect = () => {
     return new Promise((resolve, reject) => {
         try{
-            pm2.connect((err) => {
+            let noDaemon = platform === 'win' ? true : false
+            if(process.env.NODE_ENV === 'development') noDaemon = false;
+            pm2.connect(noDaemon, (err) => {
                 if(err) {
                     process.exit(2);
                     logger.error(err);
@@ -29,41 +70,36 @@ const pm2Connect = () => {
 
 const pm2List = () => {
     return new Promise((resolve, reject) => {
-        pm2Connect().then(() => {
-            try{
-                pm2.list((err, pList) => {
-                    pm2.disconnect()
-                    if(err){
-                        logger.error(err)
-                        reject(err)
-                        return;
-                    }
-                    resolve(pList)
-                })
-            }catch(err){
-                pm2.disconnect()
-                logger.error(err)
-                reject(err)
-            }
-        }).catch(err => reject(err))
+        try{
+            pm2.list((err, pList) => {
+                if(err){
+                    logger.error(err)
+                    reject(err)
+                    return;
+                }
+                resolve(pList)
+            })
+        }catch(err){
+            logger.error(err)
+            reject(err)
+        }
     })
 }
 
-const pm2Delete = (target) => {
+const pm2Delete = async(target) => {
     return new Promise((resolve, reject) => {
         pm2Connect().then(() => {
             try{
                 pm2.delete(target, err => {
-                    pm2.disconnect();
                     if(err) {
                         logger.error(err)
                         reject(err)
                         return;
                     }
                     resolve(true)
+                    
                 })
             }catch(err){
-                pm2.disconnect()
                 logger.error(err)
                 reject(err)
             }
@@ -73,7 +109,8 @@ const pm2Delete = (target) => {
 
 
 const dealSpaceInPath = (pathname) => {
-    return eval('"' + pathname.replace(/ /g, '\\ ') + '"')
+    const normalizePath = path.normalize(pathname);
+    return normalizePath.replace(/ /g, '\ ')
 }
 
 export const describeProcess = (name) => {
@@ -81,7 +118,6 @@ export const describeProcess = (name) => {
         pm2Connect().then(() => {
             try{
                 pm2.describe(name, (err, res) => {
-                    pm2.disconnect();
                     if(err){
                         logger.error(err)
                         reject(err);
@@ -90,7 +126,6 @@ export const describeProcess = (name) => {
                     resolve(res)
                 })
             }catch(err){
-                pm2.disconnect();
                 logger.error(err)
                 reject(err)
             }
@@ -98,11 +133,12 @@ export const describeProcess = (name) => {
     })
 }
 
-export const startProcess = async (options) => {
+export const startProcess = async (options, no_ext) => {
+    const extensionName = platform === 'win' ? '.exe' : ''
     options = {
         ...options,
         "cwd": path.join(KUNGFU_ENGINE, 'kfc'),
-        "script": "kfc",
+        "script": `kfc${extensionName}`,
         "log_type": "json",
         "out_file": buildProcessLogPath(options.name),
         "err_file": buildProcessLogPath(options.name),
@@ -113,19 +149,19 @@ export const startProcess = async (options) => {
         "watch": false,
         "force": options.force === undefined ? true : options.force,
         "exec_mode" : "fork",
+        "interpreterArgs": ["~harmony"],
         "env": {
-            // "PM2_HOME": PM2_DIR,
             "KF_HOME": dealSpaceInPath(BASE_DIR),
-            // "ELECTRON_RUN_AS_NODE": true,
-            NODE_ENV: "production",
         }
+    };
+    if(no_ext) {
+        options['env']['KF_NO_EXT'] = 'on';
     }
 
     return new Promise((resolve, reject) => {
         pm2Connect().then(() => {
             try{
                 pm2.start(options, (err, apps) => { 
-                    pm2.disconnect();
                     if(err) {
                         logger.error(err)
                         reject(err);
@@ -134,7 +170,6 @@ export const startProcess = async (options) => {
                     resolve(apps);
                 })
             }catch(err){
-                pm2.disconnect();
                 logger.error(err)
                 reject(err)
             }
@@ -143,45 +178,32 @@ export const startProcess = async (options) => {
 }
 
 //启动pageEngine
-export const startPageEngine = async(force) => {
-    const processName = 'page_engine'
-    const pageEngines = await describeProcess(processName);
-    if(pageEngines instanceof Error) return new Promise((resolve, reject) => reject(new Error(pageEngines)))
-    if(!force && pageEngines.length) return new Promise(resolve => resolve(new Error('page_engine正在运行！')))
+export const startMaster = async(force) => {
+    const processName = 'master'
+    const master = await describeProcess(processName);
+    if(master instanceof Error) throw master
+    if(!force && master.length) throw new Error('master正在运行！')
     return startProcess({
         "name": processName,
-        "args": "paged --name paged",
-    }).catch(err => logger.error(err))
-}
-
-//启动交易日服务
-export const startCalendarEngine = async(force) => {
-    const processName = 'calendar_engine'
-    const calendarEngines = await describeProcess(processName);
-    if(calendarEngines instanceof Error) return new Promise((resolve, reject) => reject(calendarEngines))
-    if(!force && calendarEngines.length) return new Promise(resolve => resolve(new Error('calendar_engine正在运行！')))
-    return startProcess({
-        "name": "calendar_engine",
-        "args": "calendar --name calendar",
-    }).catch(err => logger.error(err))    
+        "args": "master",
+    }, true).catch(err => logger.error(err))
 }
 
 //启动md
 export const startMd = (resource, processName) => {
     return startProcess({
         "name": processName,
-        "args": `md_${resource}`,
-    }).catch(err => logger.error(err))      
+        "args": `md -s ${resource}`,
+    }, false).catch(err => logger.error(err))
 }
 
 //启动td
 export const startTd = (resource, processName) => {
     return startProcess({
         "name": processName,
-        "args": `td_${resource} --name ${processName}`,
-    })   
+        "args": `td -d ${resource} --name ${processName}`,
+    }, false)
 }
-
 
 //启动strategy
 export const startStrategy = (strategyId, strategyPath) => {
@@ -189,64 +211,45 @@ export const startStrategy = (strategyId, strategyPath) => {
     return startProcess({
         "name": strategyId,
         "args": `strategy --name ${strategyId} --path ${strategyPath}`,
-    }).catch(err => {
+    }, false).catch(err => {
         logger.error('startStrategy-err', err)
-    })   
+    })
 }
 
 
 //列出所有进程
 export const listProcessStatus = () => {
-    return new Promise((resolve, reject) => {
-        pm2List().then(pList => {
-            let processStatus = {}
-            Object.freeze(pList).forEach(p => {
-                const name = p.name;
-                const status = p.pm2_env.status
-                processStatus[name] = status
-            })
-            resolve(processStatus)
-        }).catch(err => reject(err))
+    return pm2List().then(pList => {
+        let processStatus = {}
+        Object.freeze(pList).forEach(p => {
+            const name = p.name;
+            const status = p.pm2_env.status
+            processStatus[name] = status
+        })
+        return processStatus
     })
 }
 
 //删除进程
-export const deleteProcess = async(processName) => {
-    const processDescribe = await describeProcess(processName)
-    if(processDescribe instanceof Error) return new Promise((resolve, reject) => reject(processDescribe)); 
-    //判断进程是否存在
-    if(!processDescribe.length) return new Promise((resolve) => resolve(true))
-    return pm2Delete(processName)
-}
+export const deleteProcess = (processName) => {
+    return new Promise(async(resolve, reject) => {
+        let processes = [];
+        try{
+            processes = await describeProcess(processName)
+        }catch(err){
+            console.error(err)
+        }
 
-
-//干掉所有进程
-export const killAllProcess = () => {
-    return new Promise((resolve, reject) => {
-        pm2List().then(list => {
-            const len = list.length;
-            if(!len){
-                resolve([])
-                return;
-            }
-            //要保证page, calendar最后一个退出
-            
-            (async() => {
-                let i, len = list.length;
-                try{
-                    for(i = 0; i < len; i++){
-                        const name = list[i].name
-                        if(name === 'page_engine') continue;
-                        await pm2Delete(name)
-                    }
-                }catch(err){
-                    logger.error(err)
-                }
-            })()
-            .then(() => pm2Delete('page_engine'))
-            .then(() => resolve(true))
-            .catch(err => reject(err))
-        }).catch(err => reject(err))
+        //如果進程不存在，會跳過刪除步驟
+        if(!processes || !processes.length) {
+            resolve(true)
+            return;
+        }
+        const pids = processes.map(prc => prc.pid);
+        pm2Delete(processName)
+        .then(() => resolve(true))
+        .catch(err => reject(err))
+        .finally(() => kfKill(pids).catch(err => console.error(err)))
     })
 }
 
@@ -265,10 +268,12 @@ export const killGodDaemon = () => {
                     resolve(true)
                 })
             }catch(err){
-                logger.error(err)
                 pm2.disconnect()
+                logger.error(err)
                 reject(err)
             }
         }).catch(err => reject(err))
     })
 }
+
+

@@ -42,34 +42,49 @@ Setup 编译及运行环境
 
 功夫的编译依赖以下工具：
 git
-npm
-python (2/3)
+Node.js (>=8 <11)
+yarn
+Python 2
 pipenv
 cmake (>3.12)
+
+功夫的编译需要系统默认（$PATH指向）的 Python 版本为 2。如果系统中也存在 Python 3，则可以通过下述 pipenv 的方式使得最终输出的 app 使用 Python 3，但仍然需要默认的 Python 是 2。
+
+功夫编译依赖 [Node.js](https://nodejs.org)，建议预先进行如下设置加速依赖包的下载：
+```
+$ npm config set registry https://registry.npm.taobao.org
+$ npm config set electron_mirror https://npm.taobao.org/mirrors/electron/
+$ npm config set PUPPETEER_DOWNLOAD_HOST https://npm.taobao.org/mirrors
+$ npm config set puppeteer_download_host https://npm.taobao.org/mirrors
+$ npm config set sass-binary-site http://npm.taobao.org/mirrors/node-sass
+```
 
 #### MacOSX
 
 ```
-$ brew install git npm cmake
+$ brew install git cmake node@10
+$ npm install -g yarn electron-builder
 $ pip install pipenv
 ```
 
 #### Windows
 
-开发组在 Visual Studio 2017 15.9.11 环境下进行工作。
+开发组在 Visual Studio 2017 15.9.11 环境下进行工作，安装时需要勾选 VC140（Visual Studio 2015) toolset。
 
-下载并安装 [git](https://git-scm.com/download/win)，[Python](https://www.python.org/downloads/windows/)，[CMake](https://cmake.org/install/)，[nodejs 8](https://nodejs.org/download/release/v8.16.0/) 并添加相应路径至 %PATH% 环境变量。
+下载并安装 [git](https://git-scm.com/download/win)，[Python](https://www.python.org/downloads/windows/)，[CMake](https://cmake.org/install/)，[Node.js LTS 10.15.3](https://nodejs.org/en/download/) 并添加相应路径至 %PATH% 环境变量。
 
 Windows需要额外安装 [Boost 1.64.0](https://sourceforge.net/projects/boost/files/boost-binaries/1.64.0/)，下载并安装 boost_1_64_0-msvc-14.1-64.exe。
 
 ```
+C:\> npm instal -g yarn electron-builder
 C:\> pip install pipenv
 ```
 
 #### Linux
 
 ```
-$ yum install git npm cmake
+$ # install git cmake node.js
+$ node-v10.15.3-linux-x64/bin/npm install -g yarn electron-builder
 $ pip install pipenv
 ```
 
@@ -78,54 +93,38 @@ Compile 编译
 
 #### 常规操作
 
-获取代码：
+获取代码并编译：
 ```
 $ git clone https://github.com/taurusai/kungfu
 $ cd kungfu
-```
-
-功夫使用 [npm](https://npmjs.com) 进行编译，建议预先对 npm 进行如下设置：
-```
-$ npm config set registry https://registry.npm.taobao.org
-$ npm config set electron_mirror https://npm.taobao.org/mirrors/electron/
-$ npm config set PUPPETEER_DOWNLOAD_HOST https://npm.taobao.org/mirrors
-$ npm config set puppeteer_download_host https://npm.taobao.org/mirrors
-$ npm config set sass-binary-site http://npm.taobao.org/mirrors/node-sass
-
-$ npm install yarn -g
-$ npm install electron-builder -g
-```
-
-设置完成后可以进行编译：
-```
 $ yarn install
-$ npm run build
+$ yarn run build
 ```
 
 编译结果输出在 build 目录下，例如在 MacOSX 系统上，最终的可执行文件输出在 build/mac/Kungfu.Trader.app。
 
 遇到编译问题需要完整的重新编译时，执行以下命令清理临时文件：
 ```
-$ npm run clean
+$ yarn run clean
 ```
 
 #### 选择编译模式
 
 功夫默认编译为 Release 模式（-D[CMAKE_BUILD_TYPE](https://cmake.org/cmake/help/v3.12/variable/CMAKE_BUILD_TYPE.html)="Release")，如果希望以 Debug 模式编译，需要执行以下命令：
 ```
-$ npm config set kungfu:cmakejsopt "debug"
+$ yarn config set kungfu:cmakejsopt "debug"
 ```
 
 执行以下命令恢复 Release 模式：
 ```
-$ npm config set kungfu:cmakejsopt
+$ yarn config set kungfu:cmakejsopt
 ```
 
 更多可选设置请参考 [CMake.js Options](https://www.npmjs.com/package/cmake-js)。
 
 切换编译模式后，需要执行以下命令重新生成配置文件：
 ```
-$ npm run config
+$ yarn run config
 ```
 
 
@@ -134,17 +133,17 @@ $ npm run config
 功夫支持 Python 2 及 Python 3，在系统预装了相应版本的情况下，编译时可以自行选择所需的 Python 版本。
 执行以下命令选择 Python 3：
 ```
-$ npm config set kungfu:pyver three
+$ yarn config set kungfu:pyver three
 ```
 
 执行以下命令选择 Python 2：
 ```
-$ npm config set kungfu:pyver two
+$ yarn config set kungfu:pyver two
 ```
 
 切换 Python 版本后，需要执行以下命令重新生成配置文件：
 ```
-$ npm run config
+$ yarn run config
 ```
 
 #### 编译过程产生的临时文件
@@ -157,7 +156,7 @@ dist
 ```
 通常情况下可通过执行如下命令对 build 和 dist 进行清理：
 ```
-$ npm run clean
+$ yarn run clean
 ```
 需要注意 node_modules 目录为 npm 产生的包目录，一般情况下无需清除，如有特殊需要可手动删除。
 

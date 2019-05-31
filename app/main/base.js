@@ -1,17 +1,15 @@
 const path = require('path')
-const sqlite3 = require('sqlite3').verbose();
-const fs = require('fs');
 const fse = require('fs-extra');
+const sqlite3 = require('sqlite3').verbose();
 const initGobalDB = require('__gConfig/initGlobalDB.json');
-const {GLOBAL_DIR} = require('__gConfig/pathConfig');
-const {logger} = require('__gUtils/logUtils');
-const fkill = require('fkill');
-
+const { GLOBAL_DIR } = require('__gConfig/pathConfig');
+const { logger } = require('__gUtils/logUtils');
+const { platform } = require('__gConfig/platformConfig');
 
 export const initDB = () => {
     //检测是否有数据库目录，没有则创建
-    if(!fs.existsSync(GLOBAL_DIR)){
-        fs.mkdirSync(GLOBAL_DIR)
+    if(!fse.existsSync(GLOBAL_DIR)){
+        fse.mkdirSync(GLOBAL_DIR)
     }
 
     //循环建立表
@@ -31,9 +29,8 @@ export const initDB = () => {
         if(err) logger.error(err);
     })
 
-}
-
-
-export const killAll = () => {
-    return fkill(['kfc', 'pm2'], {force: true})
+    //holidays.db
+    fse.copy(path.join(__resources, 'default', 'holidays.db'), path.join(GLOBAL_DIR, 'holidays.db'), err => {
+        if(err) logger.error(err);
+    })
 }

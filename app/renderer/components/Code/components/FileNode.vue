@@ -31,6 +31,7 @@
                 v-else-if="id === 'pending'"
                 ref="add-pending" 
                 :class="{'error': editError}" 
+                v-model.trim="fileName"
                 @click.stop="() => {}"
                 @focus.stop="() => {}"
                 @keyup.enter.native="e => handleAddFileBlur(e, 'enter')"
@@ -51,8 +52,8 @@
                 <!-- path or rename + delete-->
                 <span :title="fileNode.filePath" class="path text-overflow" v-if="fileNode.root">{{fileNode.filePath}}</span>
                 <span class="fr file-oper" v-if="!fileNode.root && !onEditing && id !== 'pending'">
-                    <i class="fa fa-edit" title="重命名" @click.stop="handleRename(fileNode)"></i>
-                    <i class="fa fa-close" title="删除" @click.stop="handleDelete(fileNode)"></i>
+                    <i class="el-icon-edit-outline mouse-over" title="重命名" @click.stop="handleRename(fileNode)"></i>
+                    <i class="el-icon-close mouse-over" title="删除" @click.stop="handleDelete(fileNode)"></i>
                 </span>
                 <div class="error-message" v-if="editError">{{editErrorMessage}}</div>
             </span>
@@ -125,6 +126,8 @@ export default {
          //点击文件或文件树
         handleClickFile(file){
             const t = this;
+            //正在编辑的input
+            if(Object.keys(file).length === 1) return
             //更新active file id
             t.$store.dispatch('setCurrentFile', file)
             //如果为dir
@@ -310,7 +313,7 @@ export default {
             }
 
             if(!iconName) return;
-            return `resources/icons/${iconName}.svg`
+            return `resources/file-icons/${iconName}.svg`
         }
     }
 }

@@ -3,10 +3,7 @@ import Vue from 'vue';
 import {closeGlobalGatewayNanomsg, refreshGlobalGatewayNanomsg} from '@/io/nano/buildNmsg'
 import * as msgType from '@/io/nano/msgType'
 import * as ACCOUNT_API from '@/io/account';
-import {EVENT_BUS} from '@/io/event-bus';
 import {startTd, startMd, deleteProcess} from '__gUtils/processUtils'
-import {removeFileFolder} from '__gUtils/fileUtils'
-import {buildGateWayStateDBPath} from '__gConfig/pathConfig'
 import {debounce} from '@/assets/js/utils'
 
 
@@ -27,6 +24,7 @@ export const setOneMdTdState = ({commit},  {name, oneState}) => {
 //关闭状态删除某个状态
 export const deleteOneMdTdState = ({commit},  name) => {
     commit('DELETE_ONE_MD_TD_STATE',  name)
+    return true
 }
 
 export const setAccountsAsset = ({commit}, accountsAsset) => {
@@ -70,22 +68,22 @@ export const buildGatewayNmsgListener = ({dispatch}, gatewayName) => {
     //如果新的message，则报警
     messageInfo[gatewayName] = ''
     sub.on('data', buf => {
-        const data = JSON.parse(String(buf).replace(/\0/g,''))      
-        //监听td、md状态
-        if(msgType.gatewayState == data.msg_type) {
-            if(data.data && data.data.message) {
-                const message = data.data.message;
-                if(messageInfo[gatewayName] !== message){
-                    debounceMessageError(gatewayName, data.data.message)
+        const data = JSON.parse(String(buf))
+        const dataMsgType = data.msg_type;
+        switch(dataMsgType){
+            case msgType.gatewayState: //监听td、md状态
+                dispatch('setOneMdTdState', {name: gatewayName, oneState: Object.freeze(data.data)})
+                if(data.data && data.data.message) {
+                    const message = data.data.message;
+                    if(messageInfo[gatewayName] !== message) debounceMessageError(gatewayName, data.data.message)
+                }else {
+                    messageInfo[gatewayName] = '';
                 }
-            }else{
-                messageInfo[gatewayName] = '';
-            }
-            dispatch('setOneMdTdState', {name: gatewayName, oneState: Object.freeze(data.data)})
-        }
-        //监听资金
-        if(msgType.accountInfo == data.msg_type) {
-            dispatch('setAccountAssetById', {accountId, accountAsset: Object.freeze(data.data)})
+                //更新md/td状态
+                break;
+            case msgType.accountInfo: //监听资金
+                dispatch('setAccountAssetById', {accountId, accountAsset: Object.freeze(data.data)})
+                break
         }
     })
 }
@@ -96,16 +94,15 @@ export const switchTd = ({dispatch}, {account, value}) => {
     const {account_id, source_name, config} = account
     const tdProcessId = `td_${account_id}`
     if(!value){
-        deleteProcess(tdProcessId)
+        return deleteProcess(tdProcessId)
         .then(() => dispatch('deleteOneMdTdState', tdProcessId))
         .then(() => closeGlobalGatewayNanomsg(tdProcessId))
         .then(() => Vue.message.success('操作成功！'))        
         .catch(err => Vue.message.error(err.message || '操作失败！'))
-        return
     }
 
     //改变数据库表内容，添加或修改
-    dispatch('setTasksDB', {name: tdProcessId, type: 'td', config})
+    return dispatch('setTasksDB', {name: tdProcessId, type: 'td', config})
     .then(() => dispatch('getTasks'))//重新获取数据
     .then(() => dispatch('setOneMdTdState', {name: tdProcessId, oneState: Object.freeze({})}))
     .then(() => dispatch('buildGatewayNmsgListener', tdProcessId))    
@@ -119,16 +116,15 @@ export const switchMd = ({dispatch}, {account, value}) => {
     const {source_name, config} = account;
     const mdProcessId = `md_${source_name}`
     if(!value){
-        deleteProcess(mdProcessId)
+        return deleteProcess(mdProcessId)
         .then(() => dispatch('deleteOneMdTdState', mdProcessId))
         .then(() => closeGlobalGatewayNanomsg(mdProcessId))
         .then(() => Vue.message.success('操作成功！'))        
         .catch(err => Vue.message.error(err.message || '操作失败！'))
-        return;
     }
 
     //改变数据库表内容，添加或修改
-    dispatch('setTasksDB', {name: mdProcessId, type: 'md', config})
+    return dispatch('setTasksDB', {name: mdProcessId, type: 'md', config})
     .then(() => dispatch('getTasks'))//重新获取数据
     .then(() => dispatch('setOneMdTdState', {name: mdProcessId, oneState: Object.freeze({})}))
     .then(() => dispatch('buildGatewayNmsgListener', mdProcessId))    
@@ -136,6 +132,3 @@ export const switchMd = ({dispatch}, {account, value}) => {
     .then(() => Vue.message.start('正在启动...'))       
     .catch(err => Vue.message.error(err.message || '操作失败！'))          
 }
-
-
-

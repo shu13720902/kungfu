@@ -1,7 +1,9 @@
 <template>
   <div class="code-editor">
     <div id="editor-content" v-if="currentFile !== null && !currentFile.isDir"></div>
-    <i class="iconfont tr-LOGO-1" v-else></i>
+    <svg v-else class="icon tr-LOGO-1" :aria-hidden="true">
+        <use xlink:href="#tr-LOGO-1"></use>
+    </svg>
   </div>
 </template>
 <script>
@@ -76,6 +78,7 @@ export default {
                 },
                 scrollTimer: null,
                 smartIndent: true,
+                
             }
         };
 
@@ -117,7 +120,8 @@ export default {
     watch: {
         currentFile(newFile) {
             const t = this;
-            if (!newFile.isDir) {
+            if(Object.keys(newFile).length === 1) return
+            if(!newFile.isDir) {
                 const filePath = newFile.filePath;
                 CODE_UTILS.getCodeText(filePath).then(codeText => {
                     t.$nextTick().then(() => {
@@ -245,7 +249,12 @@ export default {
     position: relative;
     top: 45%;
     transform: translateY(-50%);
+    filter: drop-shadow($bg_light 1px -1px)
   }
+}
+
+#tr-LOGO-1 path{
+    fill: $bg !important;
 }
 
 .CodeMirror.CodeMirror-wrap{
